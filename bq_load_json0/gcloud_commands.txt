@@ -1,4 +1,4 @@
-gcloud run jobs deploy bq-load-json     --source .     --tasks 1   --region europe-west1     --project=tycho-project
+gcloud run jobs deploy bq-load-json     --source .     --tasks 1   --region $REGION     --project=$PROJECT
 
 
-gcloud run jobs execute bq-load-json --region europe-west1
+gcloud run jobs execute bq-load-json --region $REGION
