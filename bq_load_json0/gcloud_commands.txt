@@ -1,4 +1,23 @@
-gcloud run jobs deploy bq-load-json     --source .     --tasks 1   --region $REGION     --project=$PROJECT
+gcloud run jobs deploy bq-load-json  --source .  --tasks 1 --region $REGION --project=$PROJECT
 
 
 gcloud run jobs execute bq-load-json --region $REGION
+
+
+# building the image
+
+#localy
+docker build -t  tycho/bq-load-json:v1.0.0 .
+
+docker image ls
+
+docker tag tycho/bq-load-json:v1.0.0  europe-west1-docker.pkg.dev/tycho-project/cloud-run-source-deploy/bq-load-json:v1.0.0
+
+# auth with GCP
+gcloud auth configure-docker europe-west1-docker.pkg.dev
+#push to artifacts reg
+
+docker push europe-west1-docker.pkg.dev/tycho-project/cloud-run-source-deploy/bq-load-json:v1.0.0
+
+
+gcloud run jobs execute bq-load-json --region europe-west1

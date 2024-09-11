@@ -165,13 +165,150 @@ resource "google_storage_bucket_object" "main_data" {
 resource "google_cloud_run_v2_job" "cloudrunjob1" {
   name     = "bq-load-json"
   location = var.region
-
+  provider = google-beta
 
   template {
     template {
       containers {
-        image = "europe-west1-docker.pkg.dev/tycho-project/cloud-run-source-deploy/bq-load-json:latest"
+        image = "europe-west1-docker.pkg.dev/tycho-project/cloud-run-source-deploy/bq-load-json:v1.0.0"
+
+        volume_mounts {
+          name       = "gcs1"
+          mount_path = "/mnt/my-vol"
+        }
+      }
+      volumes {
+        name = "gcs1"
+        gcs {
+          bucket = "npo_testing_data"
+        }
       }
     }
+
   }
+}
+
+
+
+
+
+
+resource "google_bigquery_routine" "routine_media" {
+  dataset_id      = google_bigquery_dataset.npo_viewing_data.dataset_id
+  routine_id      = "viewing_events_agg_media_param_dt"
+  routine_type    = "TABLE_VALUED_FUNCTION"
+  language        = "SQL"
+  definition_body = <<-EOS
+        SELECT MediaId, count(EventId) nr_events, COUNT(DISTINCT UserId) as cnt_nr_users,
+        COUNT(DISTINCT (extract(DATE from DateTime))) as cnt_nr_days,
+        ROUND(count(EventId)/2/60,2) as Est_approx_hours
+        FROM ( 
+          SELECT * FROM `tycho-project.npo.viewing_events` 
+              WHERE DateTime > TIMESTAMP(start) and DateTime < TIMESTAMP(ends)
+            )
+        WHERE EventType = "waypoint" 
+        GROUP BY MediaId,EventType order by nr_events desc   
+  EOS
+  arguments {
+    name      = "start"
+    data_type = jsonencode({ "typeKind" : "STRING" })
+  }
+  arguments {
+    name      = "ends"
+    data_type = jsonencode({ "typeKind" : "STRING" })
+  }
+
+}
+
+
+
+resource "google_bigquery_routine" "routine_day" {
+  dataset_id      = google_bigquery_dataset.npo_viewing_data.dataset_id
+  routine_id      = "viewing_events_agg_day_param_dt"
+  routine_type    = "TABLE_VALUED_FUNCTION"
+  language        = "SQL"
+  definition_body = <<-EOS
+        SELECT extract(DATE from DateTime) Date, count(EventId) Nr_events, 
+        extract(DAYOFWEEK FROM DateTime) Dayofweek, extract(WEEK FROM DateTime) Week,
+        ROUND(count(EventId)/2/60,2) as Est_approx_hours, 
+        COUNT(DISTINCT UserId) as Nr_of_users          
+        FROM ( 
+          SELECT * FROM `tycho-project.npo.viewing_events` 
+              WHERE DateTime > TIMESTAMP(start) and DateTime < TIMESTAMP(ends)
+            )
+        where EventType = "waypoint"  
+        group by extract(DATE from DateTime), Week, Dayofweek 
+        order by Date asc
+
+  EOS
+  arguments {
+    name      = "start"
+    data_type = jsonencode({ "typeKind" : "STRING" })
+  }
+  arguments {
+    name      = "ends"
+    data_type = jsonencode({ "typeKind" : "STRING" })
+  }
+
+}
+
+
+
+resource "google_bigquery_routine" "routine_hour" {
+  dataset_id      = google_bigquery_dataset.npo_viewing_data.dataset_id
+  routine_id      = "viewing_events_agg_hour_param_dt"
+  routine_type    = "TABLE_VALUED_FUNCTION"
+  language        = "SQL"
+  definition_body = <<-EOS
+        SELECT extract(DATE from DateTime) Date, EXTRACT(HOUR FROM(TIME(DateTime))) as Hour, 
+        count(EventId) nr_events, extract(DAYOFWEEK FROM DateTime) Dayofweek, 
+        extract(WEEK FROM DateTime) Week, COUNT(DISTINCT UserId) as Nr_of_users        
+        FROM ( 
+          SELECT * FROM `tycho-project.npo.viewing_events` 
+              WHERE DateTime > TIMESTAMP(start) and DateTime < TIMESTAMP(ends)
+            )
+        where EventType = "waypoint"  
+        group by Date, Hour, EventType, Week, Dayofweek  
+        order by Date asc, Hour
+  EOS
+  arguments {
+    name      = "start"
+    data_type = jsonencode({ "typeKind" : "STRING" })
+  }
+  arguments {
+    name      = "ends"
+    data_type = jsonencode({ "typeKind" : "STRING" })
+  }
+
+}
+
+
+
+resource "google_bigquery_routine" "routine_user" {
+  dataset_id      = google_bigquery_dataset.npo_viewing_data.dataset_id
+  routine_id      = "viewing_events_agg_user_param_dt"
+  routine_type    = "TABLE_VALUED_FUNCTION"
+  language        = "SQL"
+  definition_body = <<-EOS
+        SELECT UserId, count(DISTINCT MediaId) nr_videos, count(EventId) nr_events, 
+        extract(WEEK FROM DateTime) Week, extract(YEAR from DateTime) Year, 
+        ROUND(count(EventId)/2/count(DISTINCT MediaId), 2) as ApproxMinPerVideo       
+        FROM ( 
+          SELECT * FROM `tycho-project.npo.viewing_events` 
+              WHERE DateTime > TIMESTAMP(start) and DateTime < TIMESTAMP(ends)
+            )
+        where EventType = "waypoint"  
+        group by Week, UserId, Year  
+        order by UserId asc, Year asc, Week
+
+  EOS
+  arguments {
+    name      = "start"
+    data_type = jsonencode({ "typeKind" : "STRING" })
+  }
+  arguments {
+    name      = "ends"
+    data_type = jsonencode({ "typeKind" : "STRING" })
+  }
+
 }
